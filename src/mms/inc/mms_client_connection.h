@@ -88,6 +88,22 @@ LIB61850_API MmsConnection
 MmsConnection_create(void);
 
 /**
+ * \brief Create a new MmsConnection instance with custom ISO Parameters
+ *
+ * \return the newly created instance.
+ */
+LIB61850_API MmsConnection
+MmsConnection_createWisop(const char* lAPTitle,
+                          int lAEQual,
+                          TSelector ltSelector,
+                          SSelector lsSelector,
+                          PSelector lpSelector, 
+                          const char* rAPTitle, 
+                          int rAEQual,
+                          TSelector rtSelector,
+                          SSelector rsSelector,
+                          PSelector rpSelector);
+/**
  * \brief Create a new secure (TLS enabled) MmsConnection instance
  *
  * \param tlsConfig TLS configuration parameters and certificates

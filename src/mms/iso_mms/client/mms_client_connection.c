@@ -580,6 +580,9 @@ mmsMsg_parseConfirmedErrorPDU(uint8_t* buffer, int bufPos, int maxBufPos, uint32
 
     int endPos = bufPos + length;
 
+    if (endPos > maxBufPos)
+        goto exit_error;
+
     while (bufPos < endPos) {
         tag = buffer[bufPos++];
 
@@ -637,7 +640,13 @@ mmsMsg_parseRejectPDU(uint8_t* buffer, int bufPos, int maxBufPos, uint32_t* invo
     if (bufPos < 0)
         goto exit_error;
 
+    if (bufPos + length > maxBufPos)
+        goto exit_error;
+
     int endPos = bufPos + length;
+
+    if (endPos > maxBufPos)
+        goto exit_error;
 
     while (bufPos < endPos) {
         tag = buffer[bufPos++];
@@ -1208,14 +1217,14 @@ mmsIsoCallback(IsoIndication indication, void* parameter, ByteBuffer* payload)
         int bufPos = 1;
 
         bufPos = BerDecoder_decodeLength(buf, &length, bufPos, payload->size);
-        if (bufPos < 0)
+        if (bufPos == -1)
             goto exit_with_error;
 
         if (buf[bufPos++] == 0x02) {
             int invokeIdLength;
 
             bufPos = BerDecoder_decodeLength(buf, &invokeIdLength, bufPos, payload->size);
-            if (bufPos < 0)
+            if (bufPos == -1)
                 goto exit_with_error;
 
             uint32_t invokeId =
@@ -1261,11 +1270,10 @@ mmsIsoCallback(IsoIndication indication, void* parameter, ByteBuffer* payload)
         int length;
 
         bufPos = BerDecoder_decodeLength(buf, &length, bufPos, payload->size);
-        if (bufPos < 0)
+        if (bufPos == -1)
             goto exit_with_error;
 
-        bool hasInvokeId = false;
-        uint32_t invokeId = 0;
+        uint32_t invokeId;
 
         while (bufPos < payload->size) {
 
@@ -1279,18 +1287,10 @@ mmsIsoCallback(IsoIndication indication, void* parameter, ByteBuffer* payload)
             }
 
             bufPos = BerDecoder_decodeLength(buf, &length, bufPos, payload->size);
-            if (bufPos < 0)
+            if (bufPos == -1)
                 goto exit_with_error;
 
             if (extendedTag) {
-
-                if (hasInvokeId == false) {
-                    if (DEBUG_MMS_CLIENT)
-                        printf("MMS_CLIENT: invalid message received - missing invoke ID!\n");
-
-                    goto exit_with_error;
-                }
-
                 switch (nestedTag)
                 {
 
@@ -1351,8 +1351,6 @@ mmsIsoCallback(IsoIndication indication, void* parameter, ByteBuffer* payload)
                     if (DEBUG_MMS_CLIENT)
                         printf("MMS_CLIENT: received request with invokeId: %i\n", invokeId);
 
-                    hasInvokeId = true;
-
                     self->lastInvokeId = invokeId;
 
                     break;
@@ -1393,7 +1391,6 @@ exit_with_error:
     return;
 }
 
-#if (CONFIG_MMS_THREADLESS_STACK == 0)
 static void*
 connectionHandlingThread(void* parameter)
 {
@@ -1401,12 +1398,12 @@ connectionHandlingThread(void* parameter)
 
     while (self->connectionThreadRunning) {
         if (MmsConnection_tick(self))
-            Thread_sleep(1);
+            Thread_sleep(10);
     }
 
     return NULL;
 }
-#endif /* (CONFIG_MMS_THREADLESS_STACK == 0) */
+
 
 static MmsConnection
 MmsConnection_createInternal(TLSConfiguration tlsConfig, bool createThread)
@@ -1473,10 +1470,117 @@ MmsConnection_createInternal(TLSConfiguration tlsConfig, bool createThread)
     return self;
 }
 
+static MmsConnection
+MmsConnection_createWIsoParams(TLSConfiguration tlsConfig, 
+                               bool createThread, 
+                               const char* lAPTitle,
+                               int lAEQual,
+                               TSelector ltSelector,
+                               SSelector lsSelector,
+                               PSelector lpSelector, 
+                               const char* rAPTitle, 
+                               int rAEQual,
+                               TSelector rtSelector,
+                               SSelector rsSelector,
+                               PSelector rpSelector)
+{
+#if (CONFIG_MMS_THREADLESS_STACK == 1)
+    if (createThread)
+        return NULL;
+#endif
+
+    MmsConnection self = (MmsConnection) GLOBAL_CALLOC(1, sizeof(struct sMmsConnection));
+
+    if (self) {
+
+        self->parameters.dataStructureNestingLevel = -1;
+        self->parameters.maxServOutstandingCalled = -1;
+        self->parameters.maxServOutstandingCalling = -1;
+        self->parameters.maxPduSize = -1;
+
+        self->parameters.maxPduSize = CONFIG_MMS_MAXIMUM_PDU_SIZE;
+
+        self->requestTimeout = CONFIG_MMS_CONNECTION_DEFAULT_TIMEOUT;
+
+        self->lastInvokeIdLock = Semaphore_create(1);
+        self->outstandingCallsLock = Semaphore_create(1);
+
+        self->associationStateLock = Semaphore_create(1);
+        self->connectionState = MMS_CONNECTION_STATE_CLOSED;
+
+        self->concludeHandler = NULL;
+        self->concludeHandlerParameter = NULL;
+        self->concludeTimeout = 0;
+
+        self->outstandingCalls = (MmsOutstandingCall) GLOBAL_CALLOC(OUTSTANDING_CALLS, sizeof(struct sMmsOutstandingCall));
+
+        self->isoParameters = IsoConnectionParameters_create();
+        
+        /* Set local values for connection parameters */
+        //TSelector ltSelector = { 2, { 0, 1 } };
+        //SSelector lsSelector = { 2, { 0, 1 } };
+        //PSelector lpSelector = { 4, { 0, 0, 0, 1 } };
+
+        /* Set remote values for connection parameters */
+        //TSelector rtSelector = { 2, { 0, 1 } };
+        //SSelector rsSelector = { 2, { 0, 1 } };
+        //PSelector rpSelector = { 4, { 0, 0, 0, 1 } };
+
+        IsoConnectionParameters_setLocalAddresses(self->isoParameters, lpSelector, lsSelector, ltSelector);
+        IsoConnectionParameters_setLocalApTitle(self->isoParameters, lAPTitle, lAEQual);
+        IsoConnectionParameters_setRemoteAddresses(self->isoParameters, rpSelector, rsSelector, rtSelector);
+        IsoConnectionParameters_setRemoteApTitle(self->isoParameters, rAPTitle, rAEQual);
+
+        self->connectTimeout = CONFIG_MMS_CONNECTION_DEFAULT_CONNECT_TIMEOUT;
+
+        self->isoClient = IsoClientConnection_create(self->isoParameters, (IsoIndicationCallback) mmsIsoCallback, (void*) self);
+
+#if (CONFIG_MMS_SUPPORT_TLS == 1)
+        if (tlsConfig) {
+            IsoConnectionParameters_setTlsConfiguration(self->isoParameters, tlsConfig);
+        }
+#endif /* (CONFIG_MMS_SUPPORT_TLS == 1) */
+
+#if (CONFIG_MMS_THREADLESS_STACK == 0)
+        self->createThread = createThread;
+        self->connectionHandlingThread = NULL;
+        self->connectionThreadRunning = false;
+#endif
+    }
+
+    return self;
+}
+
 MmsConnection
 MmsConnection_create()
 {
     return MmsConnection_createInternal(NULL, true);
+}
+
+MmsConnection
+MmsConnection_createWisop(const char* lAPTitle,
+                          int lAEQual,
+                          TSelector ltSelector,
+                          SSelector lsSelector,
+                          PSelector lpSelector, 
+                          const char* rAPTitle, 
+                          int rAEQual,
+                          TSelector rtSelector,
+                          SSelector rsSelector,
+                          PSelector rpSelector)
+{
+    return MmsConnection_createWIsoParams(NULL, 
+                                          true, 
+                                          lAPTitle, 
+                                          lAEQual,
+                                          ltSelector,
+                                          lsSelector,
+                                          lpSelector, 
+                                          rAPTitle, 
+                                          rAEQual,
+                                          rtSelector,
+                                          rsSelector,
+                                          rpSelector);
 }
 
 MmsConnection
@@ -1744,13 +1848,12 @@ MmsConnection_connectAsync(MmsConnection self, MmsError* mmsError, const char* s
     }
 #endif /* (CONFIG_MMS_RAW_MESSAGE_LOGGING == 1) */
 
-    if (IsoClientConnection_associateAsync(self->isoClient, self->connectTimeout, self->requestTimeout)) {
+    if (IsoClientConnection_associateAsync(self->isoClient, self->connectTimeout)) {
         setConnectionState(self, MMS_CONNECTION_STATE_CONNECTING);
         *mmsError = MMS_ERROR_NONE;
     }
-    else {
+    else
         *mmsError = MMS_ERROR_OTHER;
-    }
 }
 
 bool
@@ -2021,13 +2124,6 @@ mmsClient_getNameList(MmsConnection self, MmsError *mmsError,
 
     if (mmsError)
         *mmsError = err;
-
-    if (err != MMS_ERROR_NONE) {
-        if (list) {
-            LinkedList_destroy(list);
-            list = NULL;
-        }
-    }
 
     return list;
 }
@@ -3380,8 +3476,7 @@ MmsConnection_readJournalTimeRangeAsync(MmsConnection self, MmsError* mmsError, 
     if ((MmsValue_getType(startTime) != MMS_BINARY_TIME) ||
             (MmsValue_getType(endTime) != MMS_BINARY_TIME)) {
 
-        if (mmsError)
-            *mmsError = MMS_ERROR_INVALID_ARGUMENTS;
+        *mmsError = MMS_ERROR_INVALID_ARGUMENTS;
         goto exit_function;
     }
 
@@ -3452,8 +3547,7 @@ MmsConnection_readJournalStartAfterAsync(MmsConnection self, MmsError* mmsError,
     if ((MmsValue_getType(timeSpecification) != MMS_BINARY_TIME) ||
             (MmsValue_getType(entrySpecification) != MMS_OCTET_STRING)) {
 
-        if (mmsError)
-            *mmsError = MMS_ERROR_INVALID_ARGUMENTS;
+        *mmsError = MMS_ERROR_INVALID_ARGUMENTS;
         goto exit_function;
     }
 
