@@ -51,6 +51,10 @@ DataAttribute* toDataAttribute(ModelNode * MN)
 { return (DataAttribute*)MN;}
 MmsError* toMmsErrorP()
 { MmsError e = MMS_ERROR_NONE; return &e;}
+void setMmsVASArrayIndex(MmsVariableAccessSpecification * var, int val)
+{ var->arrayIndex = val;}
+char* getMmsVASItemId(MmsVariableAccessSpecification * var)
+{ return var->itemId;}
 %}
 %apply int *OUTPUT {IedClientError* error};
 %apply int *OUTPUT {MmsError* error};
@@ -74,3 +78,5 @@ DataAttribute* toDataAttribute(DataObject *);
 DataAttribute* toDataAttribute(ModelNode *);
 char* toCharP(void *);
 MmsError* toMmsErrorP();
+void setMmsVASArrayIndex(MmsVariableAccessSpecification *, int);
+char* getMmsVASItemId(MmsVariableAccessSpecification *);
