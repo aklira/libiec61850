@@ -55,6 +55,26 @@ void setMmsVASArrayIndex(MmsVariableAccessSpecification * var, int val)
 { var->arrayIndex = val;}
 char* getMmsVASItemId(MmsVariableAccessSpecification * var)
 { return var->itemId;}
+MmsVariableSpecification* MmsVariableSpecification_create(int size)
+{MmsVariableSpecification* var = (MmsVariableSpecification*) calloc(size,sizeof(MmsVariableSpecification)); return var;}
+void setMmsVSType(MmsVariableSpecification* var, int val)
+{ var->type = (MmsType) val;}
+int getMmsVSType(MmsVariableSpecification* var)
+{ return (int) var->type;}
+void setMmsVSTypeSpecElementCount(MmsVariableSpecification* var, int val)
+{ var->typeSpec.structure.elementCount = val;}
+void MmsVSTypeSpecElements_create(MmsVariableSpecification* var, int size)
+{ var->typeSpec.structure.elements = (MmsVariableSpecification**) calloc(size,sizeof(MmsVariableSpecification*));}
+void setMmsVSTypeSpecUInt(MmsVariableSpecification* var, int val)
+{ var->typeSpec.unsignedInteger = val;}
+void setMmsVSTypeSpecElement(MmsVariableSpecification* var, MmsVariableSpecification* element, int i)
+{ var->typeSpec.structure.elements[i] = element;}
+void setMmsVSTypeSpecVString(MmsVariableSpecification* var, int val)
+{ var->typeSpec.visibleString = val;}
+void setMmsVSTypeInteger(MmsVariableSpecification* var, int val)
+{ var->typeSpec.integer = val;}
+void setMmsVSTypebitString(MmsVariableSpecification* var, int val)
+{ var->typeSpec.bitString = val;}
 %}
 %apply int *OUTPUT {IedClientError* error};
 %apply int *OUTPUT {MmsError* error};
@@ -80,3 +100,13 @@ char* toCharP(void *);
 MmsError* toMmsErrorP();
 void setMmsVASArrayIndex(MmsVariableAccessSpecification *, int);
 char* getMmsVASItemId(MmsVariableAccessSpecification *);
+MmsVariableSpecification* MmsVariableSpecification_create(int);
+void setMmsVSType(MmsVariableSpecification *, int);
+int getMmsVSType(MmsVariableSpecification*);
+void setMmsVSTypeSpecElementCount(MmsVariableSpecification*, int);
+void MmsVSTypeSpecElements_create(MmsVariableSpecification*, int);
+void setMmsVSTypeSpecUInt(MmsVariableSpecification*, int);
+void setMmsVSTypeSpecElement(MmsVariableSpecification*, MmsVariableSpecification*, int);
+void setMmsVSTypeSpecVString(MmsVariableSpecification*, int);
+void setMmsVSTypeInteger(MmsVariableSpecification*, int);
+void setMmsVSTypebitString(MmsVariableSpecification*, int);
