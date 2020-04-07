@@ -27,14 +27,6 @@
   $1 = temp;
 }
 
-/*
-%typemap(memberin) uint8_t [ANY] {
-  int i;
-  for (i = 0; i < $1_dim0; i++) {
-      $1[i] = $input[i];
-  }
-}*/
-
 %{
 #include <iec61850_client.h>
 #include <iec61850_model.h>
