@@ -6,6 +6,7 @@
 %ignore LogicalNode_hasUnbufferedReports(LogicalNode* node);
 %ignore MmsConnection_setIsoConnectionParameters(MmsConnection self, IsoConnectionParameters* params);
 %include "stdint.i"
+%include "client.i"
 
 %typemap(in) uint8_t value[ANY] {
   int i;
