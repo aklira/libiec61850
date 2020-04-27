@@ -1,4 +1,25 @@
 // File : client.i
+
+%typemap(in) uint8_t value[ANY] {
+  int i;
+  if (!PyList_Check($input)) {
+    PyErr_SetString(PyExc_ValueError, "Expecting a list");
+    SWIG_fail;
+  }
+  int l_length = PyList_Size($input);
+  uint8_t temp[l_length];
+  for (i = 0; i < l_length; i++) {
+    PyObject *o = PyList_GetItem($input, i);
+    if (PyNumber_Check(o)) {
+      temp[i] = (uint8_t) PyInt_AsLong(o);
+    } else {
+      PyErr_SetString(PyExc_ValueError, "Sequence elements must be numbers");      
+      SWIG_fail;
+    }
+  }
+  $1 = temp;
+}
+
 %{
 #include "mms_client_connection.h"
 #include "mms_value_internal.h"
@@ -71,12 +92,49 @@ informationReportHandler(void* parameter, char* domainName, char* variableListNa
 	}
 }
 
+MmsError* toMmsErrorP()
+{ MmsError e = MMS_ERROR_NONE; return &e;}
+void setMmsVASArrayIndex(MmsVariableAccessSpecification * var, int val)
+{ var->arrayIndex = val;}
+char* getMmsVASItemId(MmsVariableAccessSpecification * var)
+{ return var->itemId;}
+MmsVariableSpecification* MmsVariableSpecification_create(int size)
+{MmsVariableSpecification* var = (MmsVariableSpecification*) calloc(size,sizeof(MmsVariableSpecification)); return var;}
+void setMmsVSType(MmsVariableSpecification* var, int val)
+{ var->type = (MmsType) val;}
+int getMmsVSType(MmsVariableSpecification* var)
+{ return (int) var->type;}
+void setMmsVSTypeSpecElementCount(MmsVariableSpecification* var, int val)
+{ var->typeSpec.structure.elementCount = val;}
+void MmsVSTypeSpecElements_create(MmsVariableSpecification* var, int size)
+{ var->typeSpec.structure.elements = (MmsVariableSpecification**) calloc(size,sizeof(MmsVariableSpecification*));}
+void setMmsVSTypeSpecUInt(MmsVariableSpecification* var, int val)
+{ var->typeSpec.unsignedInteger = val;}
+void setMmsVSTypeSpecElement(MmsVariableSpecification* var, MmsVariableSpecification* element, int i)
+{ var->typeSpec.structure.elements[i] = element;}
+void setMmsVSTypeSpecVString(MmsVariableSpecification* var, int val)
+{ var->typeSpec.visibleString = val;}
+void setMmsVSTypeInteger(MmsVariableSpecification* var, int val)
+{ var->typeSpec.integer = val;}
+void setMmsVSTypebitString(MmsVariableSpecification* var, int val)
+{ var->typeSpec.bitString = val;}
 MmsInformationReportHandler informationReportHandler_create()
-{
-    return (MmsInformationReportHandler) informationReportHandler;
-}
-
+{ return (MmsInformationReportHandler) informationReportHandler;}
 %}
+%apply int *OUTPUT {MmsError* error};
 
+MmsError* toMmsErrorP();
+void setMmsVASArrayIndex(MmsVariableAccessSpecification *, int);
+char* getMmsVASItemId(MmsVariableAccessSpecification *);
+MmsVariableSpecification* MmsVariableSpecification_create(int);
+void setMmsVSType(MmsVariableSpecification *, int);
+int getMmsVSType(MmsVariableSpecification*);
+void setMmsVSTypeSpecElementCount(MmsVariableSpecification*, int);
+void MmsVSTypeSpecElements_create(MmsVariableSpecification*, int);
+void setMmsVSTypeSpecUInt(MmsVariableSpecification*, int);
+void setMmsVSTypeSpecElement(MmsVariableSpecification*, MmsVariableSpecification*, int);
+void setMmsVSTypeSpecVString(MmsVariableSpecification*, int);
+void setMmsVSTypeInteger(MmsVariableSpecification*, int);
+void setMmsVSTypebitString(MmsVariableSpecification*, int);
 static void informationReportHandler(void*, char*, char*, MmsValue*, LinkedList, int);
 MmsInformationReportHandler informationReportHandler_create();
