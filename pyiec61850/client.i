@@ -36,6 +36,23 @@ informationReportHandler(void* parameter, char* domainName,
 {
     if (value) {
             printf("ICCP_CLIENT: received information report for %s\n", variableListName);
+			MmsType type = MmsValue_getType(value);
+			printf("type: %i\n", type);
+			if (type == MMS_STRUCTURE){
+				
+				MmsValue * element1 = MmsValue_getElement(value, 0);
+				MmsType typeElt1 = MmsValue_getType(element1);
+			    printf("type element1: %i\n", typeElt1);
+
+				if (typeElt1 == MMS_INTEGER || typeElt1 == MMS_UNSIGNED) {
+					int32_t valuetoInt32 = MmsValue_toInt32(element1);
+					printf("value = %i\n", valuetoInt32);
+				}
+		        else if (typeElt1 == MMS_FLOAT) {
+					double valuetoDouble = MmsValue_toDouble(element1);
+					printf("value = %f\n", valuetoDouble);
+			    }
+			}
     } else {
             printf("ICCP_CLIENT: report for %s/%s: value invalid\n", domainName, variableListName);
     }
