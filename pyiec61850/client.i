@@ -24,74 +24,217 @@
 #include "mms_client_connection.h"
 #include "mms_value_internal.h"
 
+//Report Handlings
+#define REPORT_BUFFERED		    0x01	//RBE flag, buffer reports
+#define REPORT_INTERVAL_TIMEOUT 0x02    // send "General interrogations"
+#define REPORT_OBJECT_CHANGES	0x04    // send reports
+
+/*********************************************************************************************************/
 static void
-informationReportHandler(void* parameter, char* domainName, char* variableListName, MmsValue* value, LinkedList attributes, int attributesCount)
+informationReportHandler(void* parameter, char* domainName,
+        char* variableListName, MmsValue* value, bool isVariableListName)
 {
-	int i = 0;
-	time_t time_stamp;
-	const char * domain_id = NULL;
-	const char * transfer_set = NULL;
-	MmsError mmsError;
-	unsigned short time_stamp_extended = 0;
-	char * ts_extended;
-	
-	ts_extended = (char *)&time_stamp_extended;
-	time(&time_stamp);
-	if (value != NULL && attributes != NULL && attributesCount == 4 && parameter != NULL) {
-        MmsConnection * con = (MmsConnection *)parameter;
-		LinkedList list_names = LinkedList_getNext(attributes);
-		while (list_names != NULL) {
-			char * attribute_name = (char *) list_names->data;
-			if(attribute_name == NULL){
-				i++;
-				printf( "ERROR - received report with null atribute name\n");
-				continue;
-			}
-			list_names = LinkedList_getNext(list_names);
-			MmsValue * dataSetValue = MmsValue_getElement(value, i);
-			if(dataSetValue == NULL){
-				i++;
-				printf( "ERROR - received report with null dataset\n");
-				continue;
-			}
-
-			if (strncmp("Transfer_Set_Name", attribute_name, 17) == 0) {
-				MmsValue* ts_name;
-				MmsValue* d_id;
-				if(dataSetValue !=NULL) {
-					d_id = MmsValue_getElement(dataSetValue, 1);
-					if(d_id !=NULL) {
-						domain_id = MmsValue_toString(d_id);
-					} else {
-						printf( "ERROR - Empty domain id on report\n");
-					}
-					ts_name = MmsValue_getElement(dataSetValue, 2);
-					if(ts_name !=NULL) {
-						transfer_set = MmsValue_toString(ts_name);
-					} else {
-						printf( "ERROR - Empty transfer set name on report\n");
-					}
-				} else {
-					printf("ERROR - Empty data for transfer set report\n");
-				}					
-				i++;
-				continue;
-			}
-
-			if (strncmp("Transfer_Set_Time_Stamp", attribute_name, 23) == 0) {
-				time_stamp =  MmsValue_toUint32(dataSetValue);
-				i++;
-				continue;
-			}
-
-			i++;
-		}
-		MmsValue_delete(value);
-	} else{
-		printf( "ERROR - wrong report %d %d %d %d\n",value != NULL, attributes != NULL , attributesCount , parameter != NULL);
-	}
+    if (value) {
+            printf("ICCP_CLIENT: received information report for %s\n", variableListName);
+    } else {
+            printf("ICCP_CLIENT: report for %s/%s: value invalid\n", domainName, variableListName);
+    }
 }
 
+/*********************************************************************************************************/
+void write_dataset(MmsConnection con, char * id_iccp, char * ds_name, char * ts_name, int buffer_time, int integrity_time, int all_changes_reported)
+{
+	//global
+	MmsError mmsError;
+	MmsVariableSpecification * typeSpec= (MmsVariableSpecification*) calloc(1,sizeof(MmsVariableSpecification));
+	typeSpec->type = MMS_STRUCTURE;
+	typeSpec->typeSpec.structure.elementCount = 13;
+	typeSpec->typeSpec.structure.elements = (MmsVariableSpecification**) calloc(13, sizeof(MmsVariableSpecification*));
+
+	MmsVariableSpecification* element;
+
+	//0
+	element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	element->type = MMS_STRUCTURE;
+	element->typeSpec.structure.elementCount = 3;
+	element->typeSpec.structure.elements = (MmsVariableSpecification**) calloc(3, sizeof(MmsVariableSpecification*));
+
+	MmsVariableSpecification* inside_element;
+	//0.0
+	inside_element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	inside_element->type = MMS_UNSIGNED;
+	inside_element->typeSpec.unsignedInteger = 8;
+	inside_element->typeSpec.structure.elementCount = 3;
+	element->typeSpec.structure.elements[0] = inside_element;
+
+	//0.1
+	inside_element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	inside_element->type = MMS_VISIBLE_STRING;
+	inside_element->typeSpec.visibleString = -129;
+	element->typeSpec.structure.elements[1] = inside_element;
+
+	//0.2
+	inside_element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	inside_element->type = MMS_VISIBLE_STRING;
+	inside_element->typeSpec.visibleString = -129;
+	element->typeSpec.structure.elements[2] = inside_element;
+
+	typeSpec->typeSpec.structure.elements[0] = element;
+
+	//1
+	element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	element->typeSpec.integer = 8;
+	element->type = MMS_INTEGER;
+	typeSpec->typeSpec.structure.elements[1] = element;
+
+	//2
+	element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	element->typeSpec.integer = 8;
+	element->type = MMS_INTEGER;
+	typeSpec->typeSpec.structure.elements[2] = element;
+
+	//3
+	element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	element->typeSpec.integer = 8;
+	element->type = MMS_INTEGER;
+	typeSpec->typeSpec.structure.elements[3] = element;
+
+	//4
+	element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	element->typeSpec.integer = 8;
+	element->type = MMS_INTEGER;
+	typeSpec->typeSpec.structure.elements[4] = element;
+
+	//5
+	element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	element->typeSpec.integer = 8;
+	element->type = MMS_INTEGER;
+	typeSpec->typeSpec.structure.elements[5] = element;
+
+	//6
+	element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	element->typeSpec.bitString = 5;
+	element->type = MMS_BIT_STRING;
+	typeSpec->typeSpec.structure.elements[6] = element;
+
+	//7
+	element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	element->type = MMS_BOOLEAN;
+	typeSpec->typeSpec.structure.elements[7] = element;
+
+	//8
+	element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	element->type = MMS_BOOLEAN;
+	typeSpec->typeSpec.structure.elements[8] = element;
+
+	//9
+	element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	element->type = MMS_BOOLEAN;
+	typeSpec->typeSpec.structure.elements[9] = element;
+
+	//10
+	element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	element->type = MMS_BOOLEAN;
+	typeSpec->typeSpec.structure.elements[10] = element;
+
+	//11
+	element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	element->type = MMS_BOOLEAN;
+	typeSpec->typeSpec.structure.elements[11] = element;
+
+	//12
+	element = (MmsVariableSpecification*) calloc(1, sizeof(MmsVariableSpecification));
+	element->typeSpec.integer = 8;
+	element->type = MMS_INTEGER;
+	typeSpec->typeSpec.structure.elements[12] = element;
+
+	MmsValue* dataset = MmsValue_newStructure(typeSpec);
+
+	//0
+	MmsValue* elem;
+	elem = MmsValue_getElement(dataset, 0);
+
+	//0.0
+	MmsValue* ielem;
+	ielem = MmsValue_getElement(elem, 0);
+	MmsValue_setUint8(ielem, 1);
+
+	//0.1
+	ielem = MmsValue_getElement(elem, 1);
+	MmsValue_setVisibleString(ielem, id_iccp);
+
+	//0.2
+	ielem = MmsValue_getElement(elem, 2);
+	MmsValue_setVisibleString(ielem, ds_name);
+
+	//1
+	elem = MmsValue_getElement(dataset, 1);
+	MmsValue_setInt32(elem, 0);
+
+	//2
+	elem = MmsValue_getElement(dataset, 2);
+	MmsValue_setInt32(elem, 0);
+
+	//3
+	elem = MmsValue_getElement(dataset, 3);
+	MmsValue_setInt32(elem, 0);
+
+	//4
+	//Buffer interval
+	elem = MmsValue_getElement(dataset, 4);
+	MmsValue_setInt32(elem, buffer_time);
+
+	//5
+	//Integrity check time
+	elem = MmsValue_getElement(dataset, 5);
+	MmsValue_setInt32(elem, integrity_time);
+
+	// 6
+	elem = MmsValue_getElement(dataset, 6);
+
+	if(all_changes_reported&REPORT_INTERVAL_TIMEOUT) //FIXME: events are sent only spontaneusly not in GI
+		MmsValue_setBitStringBit(elem, 1, true);
+	
+	if(all_changes_reported&REPORT_OBJECT_CHANGES) 
+		MmsValue_setBitStringBit(elem, 2, true);
+
+	//7
+	elem = MmsValue_getElement(dataset, 7);
+	MmsValue_setBoolean(elem, true);
+
+	//8
+	elem = MmsValue_getElement(dataset, 8);
+	MmsValue_setBoolean(elem, true);
+
+	//9
+	elem = MmsValue_getElement(dataset, 9);
+	MmsValue_setBoolean(elem, true);
+
+	//10
+	//RBE?
+	//FIXME: if true send notification if lost event
+	elem = MmsValue_getElement(dataset, 10);
+	if(all_changes_reported&REPORT_BUFFERED)
+		MmsValue_setBoolean(elem, false);
+	else
+		MmsValue_setBoolean(elem, true);
+	//MmsValue_setBoolean(elem, true);
+
+	//11
+	elem = MmsValue_getElement(dataset, 11);
+	MmsValue_setBoolean(elem, true);
+
+	//12
+	elem = MmsValue_getElement(dataset, 12);
+	MmsValue_setInt32(elem, 0);
+
+	MmsConnection_writeVariable(con, &mmsError, id_iccp, ts_name, dataset );
+
+	MmsVariableSpecification_destroy(typeSpec);
+	MmsValue_delete(dataset);
+}
+
+/*********************************************************************************************************/
 MmsError* toMmsErrorP()
 { MmsError e = MMS_ERROR_NONE; return &e;}
 void setMmsVASArrayIndex(MmsVariableAccessSpecification * var, int val)
@@ -136,5 +279,5 @@ void setMmsVSTypeSpecElement(MmsVariableSpecification*, MmsVariableSpecification
 void setMmsVSTypeSpecVString(MmsVariableSpecification*, int);
 void setMmsVSTypeInteger(MmsVariableSpecification*, int);
 void setMmsVSTypebitString(MmsVariableSpecification*, int);
-static void informationReportHandler(void*, char*, char*, MmsValue*, LinkedList, int);
 MmsInformationReportHandler informationReportHandler_create();
+void write_dataset(MmsConnection, char *, char *, char *, int, int, int);
